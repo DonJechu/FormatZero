@@ -3,7 +3,10 @@ import { useDropzone } from "react-dropzone";
 import { PDFViewer, PDFDownloadLink } from "@react-pdf/renderer";
 import { MyDocument } from "./MyDocument";
 import { supabase } from "../lib/supabase"; 
-import { ArrowLeft, Sparkles, UploadCloud, FileText, X, Loader2, AlertCircle, Music, Download, MessageCircle } from "lucide-react";
+import { 
+  ArrowLeft, Sparkles, UploadCloud, FileText, X, Loader2, 
+  AlertCircle, Music, Download, MessageCircle, History, Clock 
+} from "lucide-react";
 
 interface EditorProps {
   userEmail: string;
@@ -17,25 +20,34 @@ export function Editor({ userEmail, onBack }: EditorProps) {
   const [title, setTitle] = useState("Mi Guía de Estudio");
   const [error, setError] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
+  const [pastGuides, setPastGuides] = useState<any[]>([]); // Estado para el historial
 
+  // 1. CARGAR DATOS (CRÉDITOS E HISTORIAL) AL INICIAR
   useEffect(() => {
-    const fetchCredits = async () => {
-      // Obtenemos el ID del usuario actual
+    const fetchData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
-        const { data, error } = await supabase
+        // Cargar Créditos
+        const { data: profile } = await supabase
           .from('profiles')
           .select('credits')
-          .eq('id', user.id) // <--- ESTO ES VITAL: Filtra por el ID del usuario
+          .eq('id', user.id)
           .single();
         
-        if (!error && data) {
-          setCredits(data.credits);
-        }
+        if (profile) setCredits(profile.credits);
+
+        // Cargar Historial de Guías
+        const { data: guides, error: guidesError } = await supabase
+          .from('guides')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (!guidesError && guides) setPastGuides(guides);
       }
     };
-    fetchCredits();
+    fetchData();
   }, []);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -66,7 +78,6 @@ export function Editor({ userEmail, onBack }: EditorProps) {
   };
 
   const handleRealMagicGeneration = async () => {
-    // Verificación ultra estricta
     if (credits === null || Number(credits) <= 0) {
       setError("Saldo insuficiente. Por favor, adquiere más créditos.");
       setIsProcessing(false);
@@ -100,22 +111,40 @@ export function Editor({ userEmail, onBack }: EditorProps) {
       if (funcError) throw new Error("Servidor ocupado. Intenta de nuevo.");
 
       const text = data.text;
+      const lines = text.split('\n');
+      const newTitle = lines[0].trim() || "Guía de Aprendizaje";
+      const newContent = lines.slice(1).join('\n').trim();
 
-      // 2. DESCUENTO ATÓMICO: Solo si la IA terminó el trabajo
-      if (credits !== null && credits > 0) {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // 2. GUARDAR EN EL HISTORIAL (DATABASE)
+      if (user) {
+        const { error: insertError } = await supabase.from('guides').insert({
+          user_id: user.id,
+          title: newTitle,
+          content: newContent
+        });
+
+        if (!insertError) {
+          // Actualizar lista local para que aparezca sin recargar
+          setPastGuides(prev => [{ title: newTitle, content: newContent, created_at: new Date().toISOString() }, ...prev]);
+        }
+      }
+
+      // 3. DESCUENTO DE CRÉDITO
+      if (credits !== null && credits > 0 && user) {
         const { error: updateError } = await supabase
           .from('profiles')
           .update({ credits: credits - 1 })
-          .eq('id', (await supabase.auth.getUser()).data.user?.id);
+          .eq('id', user.id);
 
         if (!updateError) {
           setCredits(prev => (prev !== null && prev > 0 ? prev - 1 : 0));
         }
       }
 
-      const lines = text.split('\n');
-      setTitle(lines[0].trim() || "Guía de Aprendizaje");
-      setGeneratedContent(lines.slice(1).join('\n').trim());
+      setTitle(newTitle);
+      setGeneratedContent(newContent);
 
     } catch (err: any) {
       setError(err.message || "Error al procesar. Intenta de nuevo.");
@@ -163,18 +192,19 @@ export function Editor({ userEmail, onBack }: EditorProps) {
       </header>
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        {/* PANEL IZQUIERDO: ARCHIVOS E HISTORIAL */}
         <div className="w-full lg:w-1/2 p-4 md:p-8 overflow-y-auto bg-white border-b lg:border-b-0 lg:border-r">
-          <div className="max-w-md mx-auto space-y-6">
+          <div className="max-w-md mx-auto space-y-8">
             {credits === 0 && (
               <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl flex flex-col gap-3 shadow-sm">
                 <div className="flex items-center gap-2 text-indigo-700 font-bold text-sm">
                   <Sparkles size={16} /> ¡Agotaste tus guías de regalo!
                 </div>
-                <p className="text-xs text-indigo-600">No dejes que el semestre te gane. Compra 10 guías por solo $49 MXN.</p>
+                <p className="text-xs text-indigo-600">Compra 10 guías por solo $49 MXN.</p>
                 <a 
                   href={`https://wa.me/7661033386?text=Hola! Quiero comprar créditos para mi cuenta: ${userEmail}`}
                   target="_blank"
-                  className="bg-indigo-600 text-white py-2 px-4 rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all shadow-md"
+                  className="bg-indigo-600 text-white py-2 px-4 rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 shadow-md"
                 >
                   <MessageCircle size={14} /> Comprar por WhatsApp
                 </a>
@@ -187,15 +217,44 @@ export function Editor({ userEmail, onBack }: EditorProps) {
                 <UploadCloud size={24} className="md:size-8" />
               </div>
               <p className="text-slate-700 font-bold text-sm md:text-base">Sube tus fuentes</p>
-              <p className="text-slate-400 text-[10px] md:text-xs mt-1">Fotos de libretas o grabaciones de clase</p>
+              <p className="text-slate-400 text-[10px] md:text-xs mt-1">Fotos o grabaciones de clase</p>
             </div>
+
+            {/* SECCIÓN DE HISTORIAL */}
+            {pastGuides.length > 0 && (
+              <div className="space-y-3 pt-4 border-t border-slate-100">
+                <div className="flex items-center gap-2 px-1">
+                  <History size={14} className="text-slate-400" />
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Guías Guardadas</h4>
+                </div>
+                <div className="grid gap-2">
+                  {pastGuides.map((guide, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setTitle(guide.title);
+                        setGeneratedContent(guide.content);
+                      }}
+                      className="flex flex-col items-start p-3 bg-slate-50 hover:bg-indigo-50 rounded-xl border border-slate-100 transition-all text-left group"
+                    >
+                      <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-600 truncate w-full">
+                        {guide.title}
+                      </span>
+                      <span className="text-[9px] text-slate-400 flex items-center gap-1 mt-1">
+                        <Clock size={10} /> {new Date(guide.created_at).toLocaleDateString()}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {error && <div className="p-4 bg-red-50 text-red-600 rounded-xl flex gap-3 text-sm border border-red-100 animate-pulse"><AlertCircle size={18}/>{error}</div>}
 
             <div className="space-y-2">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Archivos ({files.length})</h4>
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Archivos actuales ({files.length})</h4>
               {files.map((file, i) => (
-                <div key={i} className="flex items-center justify-between p-2 md:p-3 bg-slate-50 rounded-xl border border-slate-100 transition-colors">
+                <div key={i} className="flex items-center justify-between p-2 md:p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <div className="flex items-center gap-3 overflow-hidden">
                     {file.type.startsWith('audio/') ? <Music size={16} className="text-purple-500"/> : <FileText size={16} className="text-blue-500"/>}
                     <span className="text-xs md:text-sm font-medium text-slate-700 truncate">{file.name}</span>
@@ -207,19 +266,20 @@ export function Editor({ userEmail, onBack }: EditorProps) {
           </div>
         </div>
 
+        {/* PANEL DERECHO: PDF */}
         <div className="w-full lg:w-1/2 bg-slate-900 relative flex-1 min-h-[350px]">
           {isProcessing && (
             <div className="absolute inset-0 z-30 bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center text-white p-6 text-center">
               <Loader2 className="animate-spin text-indigo-400 mb-4" size={48} />
-              <h3 className="text-lg md:text-2xl font-black mb-2 italic tracking-tighter uppercase">Generando Ruta de Aprendizaje</h3>
-              <p className="text-slate-400 max-w-xs text-xs md:text-sm leading-relaxed font-medium">Aplicando principios de neurociencia para tu examen.</p>
+              <h3 className="text-lg md:text-2xl font-black mb-2 italic tracking-tighter uppercase">Generando Ruta</h3>
+              <p className="text-slate-400 max-w-xs text-xs md:text-sm leading-relaxed font-medium">Aplicando neurociencia para tu examen.</p>
             </div>
           )}
 
           {!generatedContent && !isProcessing && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-slate-500 p-6 text-center">
               <Sparkles size={32} className="opacity-10 mb-2" />
-              <p className="font-medium italic text-xs md:text-sm tracking-tight">La inteligencia aplicada aparecerá aquí</p>
+              <p className="font-medium italic text-xs md:text-sm tracking-tight">Selecciona una guía o procesa una nueva</p>
             </div>
           )}
 
