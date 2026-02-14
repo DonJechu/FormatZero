@@ -169,7 +169,7 @@ export function Editor({ userEmail, onBack }: EditorProps) {
                 </div>
                 <p className="text-xs text-indigo-600">Sigue estudiando al máximo. Compra un paquete de 10 guías por solo $49 MXN.</p>
                 <a 
-                  href={`https://wa.me/TUNUMERODEWHATSAPP?text=Hola! Quiero comprar créditos para mi cuenta: ${userEmail}`}
+                  href={`https://wa.me/7661033386?text=Hola! Quiero comprar créditos para mi cuenta: ${userEmail}`}
                   target="_blank"
                   className="bg-indigo-600 text-white py-2 px-4 rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 hover:bg-indigo-700"
                 >
