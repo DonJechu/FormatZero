@@ -7,7 +7,6 @@ import { Editor } from "./components/Editor";
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
@@ -26,7 +25,6 @@ function App() {
 
   // FUNCIÓN CORREGIDA: Ahora acepta el proveedor como parámetro
   const handleLogin = async (provider: 'google' | 'github') => {
-    setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -34,7 +32,6 @@ function App() {
       }
     });
     if (error) alert(error.message);
-    setLoading(false);
   };
 
   const handleLogout = async () => {
