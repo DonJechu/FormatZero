@@ -20,13 +20,19 @@ export function Editor({ userEmail, onBack }: EditorProps) {
 
   useEffect(() => {
     const fetchCredits = async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('credits')
-        .single();
+      // Obtenemos el ID del usuario actual
+      const { data: { user } } = await supabase.auth.getUser();
       
-      if (!error && data) {
-        setCredits(data.credits);
+      if (user) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('credits')
+          .eq('id', user.id) // <--- ESTO ES VITAL: Filtra por el ID del usuario
+          .single();
+        
+        if (!error && data) {
+          setCredits(data.credits);
+        }
       }
     };
     fetchCredits();
@@ -60,12 +66,12 @@ export function Editor({ userEmail, onBack }: EditorProps) {
   };
 
   const handleRealMagicGeneration = async () => {
-    // 1. BLOQUEO DE SEGURIDAD: Evita el -1 antes de empezar
-    if (credits !== null && credits <= 0) {
-      setError("No tienes créditos suficientes. Compra un paquete para continuar.");
+    // Verificación ultra estricta
+    if (credits === null || Number(credits) <= 0) {
+      setError("Saldo insuficiente. Por favor, adquiere más créditos.");
+      setIsProcessing(false);
       return;
     }
-
     if (files.length === 0) return;
     setIsProcessing(true);
     setError(null);
