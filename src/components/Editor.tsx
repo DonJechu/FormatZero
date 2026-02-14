@@ -60,8 +60,9 @@ export function Editor({ userEmail, onBack }: EditorProps) {
   };
 
   const handleRealMagicGeneration = async () => {
+    // 1. BLOQUEO DE SEGURIDAD: Evita el -1 antes de empezar
     if (credits !== null && credits <= 0) {
-      setError("Te has quedado sin créditos. Compra más para seguir generando guías.");
+      setError("No tienes créditos suficientes. Compra un paquete para continuar.");
       return;
     }
 
@@ -94,12 +95,17 @@ export function Editor({ userEmail, onBack }: EditorProps) {
 
       const text = data.text;
 
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ credits: credits! - 1 })
-        .eq('id', (await supabase.auth.getUser()).data.user?.id);
+      // 2. DESCUENTO ATÓMICO: Solo si la IA terminó el trabajo
+      if (credits !== null && credits > 0) {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ credits: credits - 1 })
+          .eq('id', (await supabase.auth.getUser()).data.user?.id);
 
-      if (!updateError) setCredits(prev => prev! - 1);
+        if (!updateError) {
+          setCredits(prev => (prev !== null && prev > 0 ? prev - 1 : 0));
+        }
+      }
 
       const lines = text.split('\n');
       setTitle(lines[0].trim() || "Guía de Aprendizaje");
@@ -113,11 +119,10 @@ export function Editor({ userEmail, onBack }: EditorProps) {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50 font-sans overflow-hidden">
-      {/* HEADER: Ajustado para ser responsivo */}
+    <div className="h-screen flex flex-col bg-slate-50 font-sans overflow-hidden text-slate-900">
       <header className="h-auto min-h-16 border-b bg-white px-4 py-2 md:px-6 flex flex-wrap items-center justify-between shrink-0 shadow-sm z-20 gap-2">
         <div className="flex items-center gap-2 md:gap-4">
-          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
+          <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
             <ArrowLeft size={20} />
           </button>
           <div>
@@ -135,11 +140,7 @@ export function Editor({ userEmail, onBack }: EditorProps) {
               fileName={`${title.replace(/\s+/g, '_')}.pdf`}
               className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-md"
             >
-              {({ loading }) => (
-                <>
-                  {loading ? <Loader2 className="animate-spin" size={14} /> : <Download size={14} />}
-                </>
-              )}
+              {({ loading }) => loading ? <Loader2 className="animate-spin" size={14} /> : <Download size={14} />}
             </PDFDownloadLink>
           )}
 
@@ -149,41 +150,38 @@ export function Editor({ userEmail, onBack }: EditorProps) {
             className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-xs md:text-sm flex items-center gap-2 hover:bg-indigo-700 disabled:bg-slate-200 transition-all shadow-md"
           >
             {isProcessing ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
-            <span className="hidden sm:inline">{isProcessing ? "Analizando..." : "PROCESAR MÁGICAMENTE"}</span>
+            <span className="hidden sm:inline">{isProcessing ? "Analizando..." : "PROCESAR"}</span>
             <span className="sm:hidden">{isProcessing ? "" : "MAGIA"}</span>
           </button>
         </div>
       </header>
 
-      {/* CONTENEDOR PRINCIPAL: Cambia de dirección en móvil */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        
-        {/* PANEL IZQUIERDO: ARCHIVOS */}
         <div className="w-full lg:w-1/2 p-4 md:p-8 overflow-y-auto bg-white border-b lg:border-b-0 lg:border-r">
           <div className="max-w-md mx-auto space-y-6">
             {credits === 0 && (
-              <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl flex flex-col gap-3">
+              <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl flex flex-col gap-3 shadow-sm">
                 <div className="flex items-center gap-2 text-indigo-700 font-bold text-sm">
                   <Sparkles size={16} /> ¡Agotaste tus guías de regalo!
                 </div>
-                <p className="text-xs text-indigo-600">Sigue estudiando al máximo. Paquete de 10 guías por $49 MXN.</p>
+                <p className="text-xs text-indigo-600">No dejes que el semestre te gane. Compra 10 guías por solo $49 MXN.</p>
                 <a 
                   href={`https://wa.me/7661033386?text=Hola! Quiero comprar créditos para mi cuenta: ${userEmail}`}
                   target="_blank"
-                  className="bg-indigo-600 text-white py-2 px-4 rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all"
+                  className="bg-indigo-600 text-white py-2 px-4 rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all shadow-md"
                 >
                   <MessageCircle size={14} /> Comprar por WhatsApp
                 </a>
               </div>
             )}
 
-            <div {...getRootProps()} className={`border-2 border-dashed rounded-2xl p-6 md:p-12 text-center cursor-pointer transition-all ${isDragActive ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-indigo-400'}`}>
+            <div {...getRootProps()} className={`border-2 border-dashed rounded-2xl p-6 md:p-12 text-center cursor-pointer transition-all ${isDragActive ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-indigo-400 hover:bg-slate-50'}`}>
               <input {...getInputProps()} />
               <div className="w-12 h-12 md:w-16 md:h-16 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4">
                 <UploadCloud size={24} className="md:size-8" />
               </div>
               <p className="text-slate-700 font-bold text-sm md:text-base">Sube tus fuentes</p>
-              <p className="text-slate-400 text-[10px] md:text-xs mt-1">Fotos o grabaciones de clase</p>
+              <p className="text-slate-400 text-[10px] md:text-xs mt-1">Fotos de libretas o grabaciones de clase</p>
             </div>
 
             {error && <div className="p-4 bg-red-50 text-red-600 rounded-xl flex gap-3 text-sm border border-red-100 animate-pulse"><AlertCircle size={18}/>{error}</div>}
@@ -203,20 +201,19 @@ export function Editor({ userEmail, onBack }: EditorProps) {
           </div>
         </div>
 
-        {/* PANEL DERECHO: VISTA PREVIA PDF */}
-        <div className="w-full lg:w-1/2 bg-slate-900 relative flex-1 min-h-[300px]">
+        <div className="w-full lg:w-1/2 bg-slate-900 relative flex-1 min-h-[350px]">
           {isProcessing && (
             <div className="absolute inset-0 z-30 bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center text-white p-6 text-center">
               <Loader2 className="animate-spin text-indigo-400 mb-4" size={48} />
-              <h3 className="text-lg md:text-2xl font-black mb-2 italic tracking-tighter uppercase">Hackeando tu aprendizaje</h3>
-              <p className="text-slate-400 max-w-xs text-xs md:text-sm leading-relaxed font-medium">Neurociencia aplicada para tu examen.</p>
+              <h3 className="text-lg md:text-2xl font-black mb-2 italic tracking-tighter uppercase">Generando Ruta de Aprendizaje</h3>
+              <p className="text-slate-400 max-w-xs text-xs md:text-sm leading-relaxed font-medium">Aplicando principios de neurociencia para tu examen.</p>
             </div>
           )}
 
           {!generatedContent && !isProcessing && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-slate-500 p-6 text-center">
               <Sparkles size={32} className="opacity-10 mb-2" />
-              <p className="font-medium italic text-xs md:text-sm">La inteligencia aplicada aparecerá aquí</p>
+              <p className="font-medium italic text-xs md:text-sm tracking-tight">La inteligencia aplicada aparecerá aquí</p>
             </div>
           )}
 
